@@ -1,1 +1,6 @@
 C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\bin\Debug\codersOfTheCaribbean.exe.config
+C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\bin\Debug\codersOfTheCaribbean.exe
+C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\bin\Debug\codersOfTheCaribbean.pdb
+C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\obj\Debug\codersOfTheCaribbean.csprojResolveAssemblyReference.cache
+C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\obj\Debug\codersOfTheCaribbean.exe
+C:\github\CodersOfTheCaribbean\codersOfTheCaribbean\codersOfTheCaribbean\obj\Debug\codersOfTheCaribbean.pdb

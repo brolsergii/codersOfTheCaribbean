@@ -23,6 +23,9 @@ class Ship
     public int Player;
     public int X;
     public int Y;
+
+    public override string ToString() => $"{Player}) ¤{Orientation}, ->{Speed}, rhum {Rhum} at ({X},{Y})";
+
 }
 
 class Barrel
@@ -37,6 +40,8 @@ class Barrel
     public int Capasity;
     public int X;
     public int Y;
+
+    public override string ToString() => $"{Capasity} at ({X},{Y})";
 }
 
 class Player
@@ -53,6 +58,16 @@ class Player
         foreach (var pair in d)
             Console.Error.WriteLine($"[{pair.Key}]:{pair.Value}");
     }
+    static int HexagonDist(int x1, int y1, int x2, int y2)
+    {
+        int a1 = x1 - (int)Math.Floor((double)y1 / 2);
+        int b1 = y1;
+        int a2 = x2 - (int)Math.Floor((double)y2 / 2);
+        int b2 = y2;
+        int dx = a1 - a2;
+        int dy = b1 - b2;
+        return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy)));
+    }
     #endregion
 
     #region Static global game state
@@ -61,10 +76,28 @@ class Player
     static List<Barrel> barrels = new List<Barrel>();
     #endregion
 
+    static Barrel FindClosestBarrel(int x, int y)
+    {
+        Barrel res = null;
+        int minDist = int.MaxValue;
+        foreach (var bar in barrels)
+        {
+            int dist = HexagonDist(x, y, bar.X, bar.Y);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                res = bar;
+            }
+        }
+        return res;
+    }
+
     static void Main(string[] args)
     {
         while (true)
         {
+            ships.Clear();
+            barrels.Clear();
             int myShipCount = int.Parse(Console.ReadLine()); // the number of remaining ships
             int entityCount = int.Parse(Console.ReadLine()); // the number of entities (e.g. ships, mines or cannonballs)
             for (int i = 0; i < entityCount; i++)
@@ -78,10 +111,40 @@ class Player
                 int arg2 = int.Parse(inputs[5]);
                 int arg3 = int.Parse(inputs[6]);
                 int arg4 = int.Parse(inputs[7]);
+                switch (entityType)
+                {
+                    case "BARREL":
+                        {
+                            barrels.Add(new Barrel(arg1, x, y));
+                            break;
+                        }
+                    case "SHIP":
+                        {
+                            ships.Add(new Ship(arg1, arg2, arg3, arg4, x, y));
+                            break;
+                        }
+                    default:
+                        {
+                            Deb($"{entityType} is no recognized");
+                            break;
+                        }
+                }
             }
-            for (int i = 0; i < myShipCount; i++)
+            //Deb("Barels:");
+            //DebObjList(barrels);
+            foreach (var myShip in ships.Where(x => x.Player == 1))
             {
-                Console.WriteLine("MOVE 11 10"); // Any valid action, such as "WAIT" or "MOVE x y"
+                string action = "";
+                // Go for rhum
+                Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
+                if (bar != null)
+                {
+                    action = $"MOVE {bar.X} {bar.Y}";
+                }
+
+                if (string.IsNullOrEmpty(action))
+                    action = "WAIT"; // Nothing to do
+                Console.WriteLine(action);
             }
         }
     }
