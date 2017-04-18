@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 class Ship
 {
-    public Ship(int orientation, int speed, int rhum, int player, int x, int y)
+    public Ship(int id, int orientation, int speed, int rhum, int player, int x, int y)
     {
         Orientation = orientation;
         Speed = speed;
@@ -15,6 +15,8 @@ class Ship
         Player = player;
         X = x;
         Y = y;
+        ID = id;
+        UnderAttack = false;
     }
 
     public int Orientation;
@@ -23,6 +25,8 @@ class Ship
     public int Player;
     public int X;
     public int Y;
+    public int ID;
+    public bool UnderAttack;
 
     public override string ToString() => $"{Player}) ¤{Orientation}, ->{Speed}, rhum {Rhum} at ({X},{Y})";
 
@@ -42,6 +46,34 @@ class Barrel
     public int Y;
 
     public override string ToString() => $"{Capasity} at ({X},{Y})";
+}
+
+class Mine
+{
+    public Mine(int x, int y)
+    {
+        X = x;
+        Y = y;
+    }
+
+    public int X;
+    public int Y;
+}
+
+class CannonBall
+{
+    public CannonBall(int shipId, int timeLeft, int x, int y)
+    {
+        ShipId = shipId;
+        TimeLeft = timeLeft;
+        X = x;
+        Y = y;
+    }
+
+    public int ShipId;
+    public int TimeLeft;
+    public int X;
+    public int Y;
 }
 
 class Player
@@ -72,8 +104,11 @@ class Player
 
     #region Static global game state
     static int[,] MAP;
+    static int MaxFireDistance = 4;
     static List<Ship> ships = new List<Ship>();
     static List<Barrel> barrels = new List<Barrel>();
+    static List<Mine> mines = new List<Mine>();
+    static List<CannonBall> cannonBalls = new List<CannonBall>();
     #endregion
 
     static Barrel FindClosestBarrel(int x, int y)
@@ -92,12 +127,99 @@ class Player
         return res;
     }
 
+    static Ship FindShipToFire(int x, int y)
+    {
+        Ship res = null;
+        int dist = int.MaxValue;
+        foreach (var rivalShip in ships.Where(s => s.Player == 0 && !s.UnderAttack))
+        {
+            int newDist = HexagonDist(x, y, rivalShip.X, rivalShip.Y);
+            if (newDist < dist && newDist <= MaxFireDistance)
+            {
+                dist = newDist;
+                rivalShip.UnderAttack = true;
+                res = rivalShip;
+            }
+        }
+        return res;
+    }
+
+    static List<Tuple<int, int>> GetNextNodes(int x, int y)
+    {
+        var list = new List<Tuple<int, int>>();
+        if (x > 0)
+            list.Add(new Tuple<int, int>(x - 1, y));
+        if (x < 22)
+            list.Add(new Tuple<int, int>(x + 1, y));
+        if (y > 0)
+            list.Add(new Tuple<int, int>(x, y - 1));
+        if (y < 20)
+            list.Add(new Tuple<int, int>(x, y + 1));
+        if (y % 2 == 0)
+        {
+            if (x > 0 && y > 0)
+                list.Add(new Tuple<int, int>(x - 1, y - 1));
+            if (x > 0 && y < 20)
+                list.Add(new Tuple<int, int>(x - 1, y + 1));
+        }
+        if (y % 2 == 1)
+        {
+            if (x < 22 && y < 20)
+                list.Add(new Tuple<int, int>(x + 1, y + 1));
+            if (x < 22 && y > 0)
+                list.Add(new Tuple<int, int>(x + 1, y - 1));
+        }
+        return list;
+    }
+
+    static List<Tuple<int, int>> GetPath(int x1, int y1, int x2, int y2)
+    {
+        //Deb($"From ({x1},{y1}) to ({x2},{y2})");
+        List<Tuple<int, int>> allNodes = new List<Tuple<int, int>>();
+        List<Tuple<int, int>> queueNodes = new List<Tuple<int, int>>();
+        Dictionary<Tuple<int, int>, Tuple<int, int>> fromTo = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
+        allNodes.Add(new Tuple<int, int>(x1, y1));
+        queueNodes.Add(new Tuple<int, int>(x1, y1));
+        Tuple<int, int> currentNode;
+        while (queueNodes.Count > 0)
+        {
+            currentNode = queueNodes.OrderBy(x => HexagonDist(x.Item1, x.Item2, x2, y2)).First();
+            if (currentNode.Item1 == x2 && currentNode.Item2 == y2)
+            {
+                break;
+            }
+            var nextNodes = GetNextNodes(currentNode.Item1, currentNode.Item2);
+            foreach (var node in nextNodes)
+            {
+                if (!allNodes.Contains(node))
+                {
+                    fromTo[node] = currentNode;
+                    queueNodes.Add(node);
+                    allNodes.Add(node);
+                }
+            }
+        }
+
+        List<Tuple<int, int>> res = new List<Tuple<int, int>>();
+        Tuple<int, int> cNode = new Tuple<int, int>(x2, y2);
+        while (!(cNode.Item1 == x1 && cNode.Item2 == y1))
+        {
+            //Deb(cNode);
+            res.Add(cNode);
+            cNode = fromTo[cNode];
+        }
+        res.Reverse();
+        return res;
+    }
+
     static void Main(string[] args)
     {
         while (true)
         {
             ships.Clear();
             barrels.Clear();
+            mines.Clear();
+            cannonBalls.Clear();
             int myShipCount = int.Parse(Console.ReadLine()); // the number of remaining ships
             int entityCount = int.Parse(Console.ReadLine()); // the number of entities (e.g. ships, mines or cannonballs)
             for (int i = 0; i < entityCount; i++)
@@ -120,7 +242,17 @@ class Player
                         }
                     case "SHIP":
                         {
-                            ships.Add(new Ship(arg1, arg2, arg3, arg4, x, y));
+                            ships.Add(new Ship(entityId, arg1, arg2, arg3, arg4, x, y));
+                            break;
+                        }
+                    case "MINE":
+                        {
+                            mines.Add(new Mine(x, y));
+                            break;
+                        }
+                    case "CANNONBALL":
+                        {
+                            cannonBalls.Add(new CannonBall(arg1, arg2, x, y));
                             break;
                         }
                     default:
@@ -134,12 +266,36 @@ class Player
             //DebObjList(barrels);
             foreach (var myShip in ships.Where(x => x.Player == 1))
             {
+                Deb($"Ship ({myShip.ID})");
                 string action = "";
-                // Go for rhum
-                Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
-                if (bar != null)
+                // Attack rival ships 
+                Ship rivalShip = FindShipToFire(myShip.X, myShip.Y);
+                if (rivalShip != null)
                 {
-                    action = $"MOVE {bar.X} {bar.Y}";
+                    action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                }
+
+                // Go for rhum
+                if (string.IsNullOrEmpty(action))
+                {
+                    Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
+                    if (bar != null)
+                    {
+                        var pathToBar = GetPath(myShip.X, myShip.Y, bar.X, bar.Y);
+                        DebObjList(pathToBar);
+                        var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
+                        if (mineOnTheWay.Any())
+                        {
+                            // Shoot the mine on the way
+                            var theMine = mineOnTheWay.FirstOrDefault();
+                            action = $"FIRE {theMine.X} {theMine.Y}";
+                        }
+                        else
+                        {
+                            // The way is clear
+                            action = $"MOVE {bar.X} {bar.Y}";
+                        }
+                    }
                 }
 
                 if (string.IsNullOrEmpty(action))
