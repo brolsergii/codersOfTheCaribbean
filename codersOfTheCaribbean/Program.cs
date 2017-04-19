@@ -57,10 +57,10 @@ class Ship
         return positions;
     }
 
-    public Tuple<int,int> GetForward()
+    public Tuple<int, int> GetForward()
     {
-        if (Orientation == 0)
-
+        //if (Orientation == 0)
+        return null;
     }
 
     public int Orientation;
@@ -465,7 +465,19 @@ class Player
                         }
                     }
                 }*/
-                
+
+                // Deblock
+                if (string.IsNullOrEmpty(action))
+                {
+                    if (oldPositions.ContainsKey(myShip.ID))
+                    {
+                        if (oldPositions[myShip.ID].Item1 == myShip.X && oldPositions[myShip.ID].Item2 == myShip.Y)
+                        {
+                            action = $"MOVE {0} {0}"; //TODO: fixme
+                        }
+                    }
+                }
+
                 // Attack rival ships 
                 if (string.IsNullOrEmpty(action))
                 {
@@ -516,18 +528,18 @@ class Player
                         }
                         else
                         {
-                            var bombOnTheWay = MoveCanProvokeMineExplosion(myShip.X, myShip.Y, pathToBarNextMove.Item1, pathToBarNextMove.Item2);
+                            /*var bombOnTheWay = MoveCanProvokeMineExplosion(myShip.X, myShip.Y, pathToBarNextMove.Item1, pathToBarNextMove.Item2);
                             if (bombOnTheWay != null)
                             {
                                 Deb($"Has a bomb on the way");
                                 // The move can provoke a bomb explosion
                                 action = $"FIRE {bombOnTheWay.Item1} {bombOnTheWay.Item2}";
-                            }
-                            else
-                            {
-                                // The way is clear
-                                action = $"MOVE {bar.X} {bar.Y}";
-                            }
+                            }*/
+                            // else
+                            // {
+                            // The way is clear
+                            action = $"MOVE {bar.X} {bar.Y}";
+                            // }
                         }
                         //}
                     }
