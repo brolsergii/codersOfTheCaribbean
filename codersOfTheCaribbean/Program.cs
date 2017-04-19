@@ -19,6 +19,44 @@ class Ship
         UnderAttack = false;
     }
 
+    public List<Tuple<int, int>> GetPositions()
+    {
+        List<Tuple<int, int>> positions = new List<Tuple<int, int>>();
+        positions.Add(new Tuple<int, int>(X, Y));
+        if (Orientation == 0 || Orientation == 3)
+        {
+            positions.Add(new Tuple<int, int>(X - 1, Y));
+            positions.Add(new Tuple<int, int>(X + 1, Y));
+        }
+        if (Orientation == 1 || Orientation == 4)
+        {
+            if (Y % 2 == 0)
+            {
+                positions.Add(new Tuple<int, int>(X, Y - 1));
+                positions.Add(new Tuple<int, int>(X - 1, Y + 1));
+            }
+            else
+            {
+                positions.Add(new Tuple<int, int>(X + 1, Y - 1));
+                positions.Add(new Tuple<int, int>(X, Y + 1));
+            }
+        }
+        if (Orientation == 2 || Orientation == 5)
+        {
+            if (Y % 2 == 0)
+            {
+                positions.Add(new Tuple<int, int>(X - 1, Y - 1));
+                positions.Add(new Tuple<int, int>(X, Y + 1));
+            }
+            else
+            {
+                positions.Add(new Tuple<int, int>(X, Y - 1));
+                positions.Add(new Tuple<int, int>(X + 1, Y + 1));
+            }
+        }
+        return positions;
+    }
+
     public int Orientation;
     public int Speed;
     public int Rhum;
@@ -104,7 +142,7 @@ class Player
 
     #region Static global game state
     static int[,] MAP;
-    static int MaxFireDistance = 4;
+    static int MaxFireDistance = 3;
     static List<Ship> ships = new List<Ship>();
     static List<Barrel> barrels = new List<Barrel>();
     static List<Mine> mines = new List<Mine>();
@@ -153,11 +191,83 @@ class Player
             if (newDist < dist && newDist <= MaxFireDistance)
             {
                 dist = newDist;
-                rivalShip.UnderAttack = true;
+                //rivalShip.UnderAttack = true; // no need
                 res = rivalShip;
             }
         }
         return res;
+    }
+
+    static Tuple<int, int> MoveCanProvokeMineExplosion(int x1, int y1, int x2, int y2)
+    {
+        int x3 = x2;
+        int y3 = y2;
+        if (x2 - x1 == 1 && y1 == y2)
+        {
+            x3 = x2 + 1;
+        }
+        if (x2 - x1 == 1 && y1 == y2)
+        {
+            x3 = x2 - 1;
+        }
+        if (y1 % 2 == 0)
+        {
+            if (x2 - x1 == -1)
+            {
+                if (y2 - y1 == -1)
+                {
+                    x3 = x2 - 1;
+                    y3 = y2 - 1;
+                }
+                if (y2 - y1 == 1)
+                {
+                    x3 = x2 - 1;
+                    y3 = y2 + 1;
+                }
+            }
+            if (x2 - x1 == 0)
+            {
+                if (y2 - y1 == -1)
+                {
+                    y3 = y2 - 1;
+                }
+                if (y2 - y1 == 1)
+                {
+                    y3 = y2 + 1;
+                }
+            }
+        }
+        if (y1 % 2 == 1)
+        {
+            if (x2 - x1 == 1)
+            {
+                if (y2 - y1 == -1)
+                {
+                    x3 = x2 + 1;
+                    y3 = y2 - 1;
+                }
+                if (y2 - y1 == 1)
+                {
+                    x3 = x2 + 1;
+                    y3 = y2 + 1;
+                }
+            }
+            if (x2 - x1 == 0)
+            {
+                if (y2 - y1 == -1)
+                {
+                    y3 = y2 - 1;
+                }
+                if (y2 - y1 == 1)
+                {
+                    y3 = y2 + 1;
+                }
+            }
+        }
+        var bombOnTheWay = mines.Where(x => x.X == x3 && x.Y == y3);
+        if (bombOnTheWay.Any())
+            bombOnTheWay.FirstOrDefault();
+        return null;
     }
 
     static List<Tuple<int, int>> GetNextNodes(int x, int y)
@@ -236,8 +346,12 @@ class Player
             var closeSubNodes = GetNextNodes(closeNode.Item1, closeNode.Item2);
             bool isSafe = true;
             foreach (var subNote in closeSubNodes)
+            {
                 if (cannonBalls.Where(n => n.X == subNote.Item1 && n.Y == subNote.Item2).Any())
                     isSafe = false;
+                if (mines.Where(n => n.X == subNote.Item1 && n.Y == subNote.Item2).Any())
+                    isSafe = false;
+            }
             if (isSafe)
                 return new Tuple<int, int>(closeNode.Item1, closeNode.Item2);
         }
@@ -300,11 +414,37 @@ class Player
             {
                 Deb($"Ship ({myShip.ID})");
                 string action = "";
-                // Attack rival ships 
-                Ship rivalShip = FindShipToFire(myShip.X, myShip.Y);
-                if (rivalShip != null)
+
+                // Save youself fron cannonballs
+                if (string.IsNullOrEmpty(action))
                 {
-                    action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                    bool cannonsOnMe = cannonBalls.Where(x => myShip.GetPositions().Select(x1 => x1.Item1).Contains(x.X) && myShip.GetPositions().Select(y1 => y1.Item2).Contains(x.Y)).Any();
+                    if (cannonsOnMe)
+                    {
+                        Deb($"Ship ({myShip.ID}) is under attack");
+                        // Run from cannonballs. Set into safe position
+                        var safePosition = GetClosestSafePosition(myShip.X, myShip.Y);
+                        if (safePosition != null)
+                        {
+                            Deb($"Going for a safe place in {safePosition}");
+                            action = $"MOVE {safePosition.Item1} {safePosition.Item2}";
+                        }
+                        else
+                        {
+                            Deb($"Nowhere to hide from ({myShip.X},{myShip.Y}). Continue attack");
+                        }
+                    }
+                }
+
+                // Attack rival ships 
+                if (string.IsNullOrEmpty(action))
+                {
+                    Ship rivalShip = FindShipToFire(myShip.X, myShip.Y);
+                    if (rivalShip != null)
+                    {
+                        Deb($"Enemy is close ({rivalShip.ID})...Fire!");
+                        action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                    }
                 }
 
                 // Go for rhum
@@ -332,6 +472,7 @@ class Player
                         }
                         else
                         {
+                            var pathToBarNextMove = pathToBar.FirstOrDefault();
                             var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
                             if (mineOnTheWay.Any())
                             {
@@ -341,8 +482,17 @@ class Player
                             }
                             else
                             {
-                                // The way is clear
-                                action = $"MOVE {bar.X} {bar.Y}";
+                                var bombOnTheWay = MoveCanProvokeMineExplosion(myShip.X, myShip.Y, pathToBarNextMove.Item1, pathToBarNextMove.Item2);
+                                if (bombOnTheWay != null)
+                                {
+                                    // The move can provoke a bomb explosion
+                                    action = $"FIRE {bombOnTheWay.Item1} {bombOnTheWay.Item2}";
+                                }
+                                else
+                                {
+                                    // The way is clear
+                                    action = $"MOVE {bar.X} {bar.Y}";
+                                }
                             }
                         }
                     }
