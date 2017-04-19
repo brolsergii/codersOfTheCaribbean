@@ -57,10 +57,26 @@ class Ship
         return positions;
     }
 
-    public Tuple<int, int> GetForward()
+    public Tuple<int, int> GetForward(int x = -1, int y = -1, bool first = true)
     {
-        //if (Orientation == 0)
-        return null;
+        Tuple<int, int> res = null;
+        if (x == -1) { x = X; }
+        if (y == -1) { y = Y; }
+        if (Orientation == 0)
+            res = new Tuple<int, int>(x + 1, y);
+        if (Orientation == 1)
+            res = new Tuple<int, int>(y % 2 == 0 ? x : x + 1, y - 1);
+        if (Orientation == 2)
+            res = new Tuple<int, int>(y % 2 == 0 ? x - 1 : x, y - 1);
+        if (Orientation == 3)
+            res = new Tuple<int, int>(x - 1, y);
+        if (Orientation == 4)
+            res = new Tuple<int, int>(y % 2 == 0 ? x - 1 : x, y + 1);
+        if (Orientation == 5)
+            res = new Tuple<int, int>(y % 2 == 0 ? x : x + 1, y + 1);
+        if (Speed == 2)
+            return GetForward(res.Item1, res.Item2, false);
+        return res;
     }
 
     public int Orientation;
@@ -205,12 +221,12 @@ class Player
 
     static bool CaseIsEmpty(int x, int y)
     {
-        if (ships.Where(s => s.X == x && s.Y == y).Any())
+        if (ships.Where(s => s.X == x && s.Y == y && s.Player == 0).Any())
             return false;
         if (mines.Where(s => s.X == x && s.Y == y).Any())
             return false;
-        //if (cannonBalls.Where(s => s.X == x && s.Y == y && s.TimeLeft == 1).Any())
-        //    return false;
+        if (cannonBalls.Where(s => s.X == x && s.Y == y && s.TimeLeft == 1).Any())
+            return false;
         return true;
     }
 
@@ -316,7 +332,7 @@ class Player
 
     static List<Tuple<int, int>> GetPath(int x1, int y1, int x2, int y2)
     {
-        Deb($"From ({x1},{y1}) to ({x2},{y2})");
+        //Deb($"From ({x1},{y1}) to ({x2},{y2})");
         List<Tuple<int, int>> allNodes = new List<Tuple<int, int>>();
         List<Tuple<int, int>> queueNodes = new List<Tuple<int, int>>();
         Dictionary<Tuple<int, int>, Tuple<int, int>> fromTo = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
@@ -346,10 +362,13 @@ class Player
         Tuple<int, int> cNode = new Tuple<int, int>(x2, y2);
         while (!(cNode.Item1 == x1 && cNode.Item2 == y1))
         {
-            Deb(cNode);
+            //Deb(cNode);
             res.Add(cNode);
             if (!fromTo.ContainsKey(cNode))
+            {
+                Deb($"No path found from ({x1},{y1}) to ({x2},{y2})");
                 return new List<Tuple<int, int>>() { new Tuple<int, int>(x2, y2) };
+            }
             cNode = fromTo[cNode];
         }
         res.Reverse();
@@ -426,45 +445,42 @@ class Player
                         }
                 }
             }
-            //Deb("Barels:");
-            //DebObjList(barrels);
             foreach (var myShip in ships.Where(x => x.Player == 1))
             {
                 Deb($"Ship ({myShip.ID})");
                 string action = "";
 
-                /*
-                // Save youself fron cannonballs
+                // Save youself from cannonballs
                 if (string.IsNullOrEmpty(action))
                 {
-                    bool cannonsOnMe = false;
-                    foreach (var cannonBall in cannonBalls)
+                    var newShipPos = myShip.GetForward();
+                    var newShip = new Ship(myShip.ID, myShip.Orientation, myShip.Speed, 0, 0, newShipPos.Item1, newShipPos.Item2);
+                    var shipPos = newShip.GetPositions();
+                    bool isSafe = true;
+                    foreach (var sp in shipPos)
+                        if (!CaseIsEmpty(sp.Item1, sp.Item2))
+                            isSafe = false;
+                    if (!isSafe)
                     {
-                        foreach (var pos in myShip.GetPositions())
-                        {
-                            if (cannonBall.X == pos.Item1 && cannonBall.Y == pos.Item2)
-                            {
-                                cannonsOnMe = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (cannonsOnMe)
-                    {
-                        Deb($"Ship ({myShip.ID}) is under attack");
-                        // Run from cannonballs. Set into safe position
-                        var safePosition = GetClosestSafePosition(myShip.X, myShip.Y);
-                        if (safePosition != null)
-                        {
-                            Deb($"Going for a safe place in {safePosition}");
-                            action = $"MOVE {safePosition.Item1} {safePosition.Item2}";
-                        }
+                        newShip.Orientation = (newShip.Orientation + 1) % 6;
+                        isSafe = true;
+                        foreach (var sp in shipPos)
+                            if (!CaseIsEmpty(sp.Item1, sp.Item2))
+                                isSafe = false;
+                        if (isSafe)
+                            action = "PORT";
                         else
                         {
-                            Deb($"Nowhere to hide from ({myShip.X},{myShip.Y}). Continue attack");
+                            newShip.Orientation = (newShip.Orientation - 2) % 6;
+                            isSafe = true;
+                            foreach (var sp in shipPos)
+                                if (!CaseIsEmpty(sp.Item1, sp.Item2))
+                                    isSafe = false;
+                            if (isSafe)
+                                action = "STARBOARD";
                         }
                     }
-                }*/
+                }
 
                 // Deblock
                 if (string.IsNullOrEmpty(action))
@@ -473,7 +489,11 @@ class Player
                     {
                         if (oldPositions[myShip.ID].Item1 == myShip.X && oldPositions[myShip.ID].Item2 == myShip.Y)
                         {
-                            action = $"MOVE {0} {0}"; //TODO: fixme
+                            var nextCase = myShip.GetForward();
+                            if (nextCase.Item1 < 0 || nextCase.Item1 > 22 || nextCase.Item2 < 0 || nextCase.Item2 > 20)
+                                action = "PORT";
+                            else
+                                action = "FASTER";
                         }
                     }
                 }
@@ -501,23 +521,6 @@ class Player
                     {
                         var pathToBar = GetPath(myShip.X, myShip.Y, bar.X, bar.Y);
                         DebList(pathToBar);
-                        //var cannonballsOnTheWay = cannonBalls.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
-                        //if (cannonballsOnTheWay.Any())
-                        //{
-                        //    // Run from cannonballs. Set into safe position
-                        //    var safePosition = GetClosestSafePosition(myShip.X, myShip.Y);
-                        //    if (safePosition != null)
-                        //    {
-                        //        Deb($"Going for a safe place in {safePosition}");
-                        //        action = $"MOVE {safePosition.Item1} {safePosition.Item2}";
-                        //    }
-                        //    else
-                        //    {
-                        //        Deb($"Nowhere to hide from ({myShip.X},{myShip.Y})");
-                        //    }
-                        //}
-                        //else
-                        //{
                         var pathToBarNextMove = pathToBar.FirstOrDefault();
                         var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
                         if (mineOnTheWay.Any())
@@ -528,26 +531,24 @@ class Player
                         }
                         else
                         {
-                            /*var bombOnTheWay = MoveCanProvokeMineExplosion(myShip.X, myShip.Y, pathToBarNextMove.Item1, pathToBarNextMove.Item2);
-                            if (bombOnTheWay != null)
-                            {
-                                Deb($"Has a bomb on the way");
-                                // The move can provoke a bomb explosion
-                                action = $"FIRE {bombOnTheWay.Item1} {bombOnTheWay.Item2}";
-                            }*/
-                            // else
-                            // {
-                            // The way is clear
                             action = $"MOVE {bar.X} {bar.Y}";
-                            // }
                         }
-                        //}
                     }
                     else
                     {
-                        // No rhum left on the map. Go hunt 
-                        var victim = FindClosestRival(myShip.X, myShip.Y);
-                        action = $"MOVE {victim.X} {victim.Y}";
+                        // No rhum left on the map.
+                        if (myShip.Rhum > ships.Where(x => x.Player == 0).Select(x => x.Rhum).Max())
+                        {
+                            // TODO: Avoid
+                            var victim = FindClosestRival(myShip.X, myShip.Y);
+                            action = $"MOVE {victim.X} {victim.Y}";
+                        }
+                        else
+                        {
+                            // Attack
+                            var victim = FindClosestRival(myShip.X, myShip.Y);
+                            action = $"MOVE {victim.X} {victim.Y}";
+                        }
                     }
                 }
 
