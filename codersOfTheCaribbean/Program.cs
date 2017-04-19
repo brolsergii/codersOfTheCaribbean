@@ -127,6 +127,22 @@ class Player
         return res;
     }
 
+    static Ship FindClosestRival(int x, int y)
+    {
+        Ship res = null;
+        int minDist = int.MaxValue;
+        foreach (var ship in ships.Where(s => s.Player == 0))
+        {
+            int dist = HexagonDist(x, y, ship.X, ship.Y);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                res = ship;
+            }
+        }
+        return res;
+    }
+
     static Ship FindShipToFire(int x, int y)
     {
         Ship res = null;
@@ -212,6 +228,22 @@ class Player
         return res;
     }
 
+    static Tuple<int, int> GetClosestSafePosition(int x, int y)
+    {
+        var closeNodes = GetNextNodes(x, y);
+        foreach (var closeNode in closeNodes)
+        {
+            var closeSubNodes = GetNextNodes(closeNode.Item1, closeNode.Item2);
+            bool isSafe = true;
+            foreach (var subNote in closeSubNodes)
+                if (cannonBalls.Where(n => n.X == subNote.Item1 && n.Y == subNote.Item2).Any())
+                    isSafe = false;
+            if (isSafe)
+                return new Tuple<int, int>(closeNode.Item1, closeNode.Item2);
+        }
+        return null;
+    }
+
     static void Main(string[] args)
     {
         while (true)
@@ -282,19 +314,43 @@ class Player
                     if (bar != null)
                     {
                         var pathToBar = GetPath(myShip.X, myShip.Y, bar.X, bar.Y);
-                        DebObjList(pathToBar);
-                        var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
-                        if (mineOnTheWay.Any())
+                        DebList(pathToBar);
+                        var cannonballsOnTheWay = cannonBalls.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
+                        if (cannonballsOnTheWay.Any())
                         {
-                            // Shoot the mine on the way
-                            var theMine = mineOnTheWay.FirstOrDefault();
-                            action = $"FIRE {theMine.X} {theMine.Y}";
+                            // Run from cannonballs. Set into safe position
+                            var safePosition = GetClosestSafePosition(myShip.X, myShip.Y);
+                            if (safePosition != null)
+                            {
+                                Deb($"Going for a safe place in {safePosition}");
+                                action = $"MOVE {safePosition.Item1} {safePosition.Item2}";
+                            }
+                            else
+                            {
+                                Deb($"Nowhere to hide from ({myShip.X},{myShip.Y})");
+                            }
                         }
                         else
                         {
-                            // The way is clear
-                            action = $"MOVE {bar.X} {bar.Y}";
+                            var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
+                            if (mineOnTheWay.Any())
+                            {
+                                // Shoot the mine on the way
+                                var theMine = mineOnTheWay.FirstOrDefault();
+                                action = $"FIRE {theMine.X} {theMine.Y}";
+                            }
+                            else
+                            {
+                                // The way is clear
+                                action = $"MOVE {bar.X} {bar.Y}";
+                            }
                         }
+                    }
+                    else
+                    {
+                        // No rhum left on the map. Go hunt 
+                        var victim = FindClosestRival(myShip.X, myShip.Y);
+                        action = $"MOVE {victim.X} {victim.Y}";
                     }
                 }
 
