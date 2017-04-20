@@ -74,7 +74,7 @@ class Ship
             res = new Tuple<int, int>(y % 2 == 0 ? x - 1 : x, y + 1);
         if (Orientation == 5)
             res = new Tuple<int, int>(y % 2 == 0 ? x : x + 1, y + 1);
-        if (Speed == 2)
+        if (Speed == 2 && first)
             return GetForward(res.Item1, res.Item2, false);
         return res;
     }
@@ -375,6 +375,81 @@ class Player
         return res;
     }
 
+    static string BestActionToApproach(Ship ship, int x, int y)
+    {
+        int bonus = int.MaxValue;
+        string action = "WAIT";
+
+        // There are 4 actions possible 
+        // Faster
+        int fasterBonus = 0;
+        if (ship.Speed == 0)
+        {
+            fasterBonus -= 50;
+        }
+        if (ship.Speed == 1)
+        {
+            Ship s1 = new Ship(0, ship.Orientation, 2, 0, 0, ship.X, ship.Y);
+            var newPost = s1.GetForward();
+            s1.X = newPost.Item1;
+            s1.Y = newPost.Item2;
+            fasterBonus = s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        }
+        if (ship.Speed == 2)
+        {
+            fasterBonus += 50;
+        }
+        if (bonus > fasterBonus)
+        {
+            Deb($"Faster bonus: {fasterBonus}");
+            bonus = fasterBonus;
+            action = "FASTER";
+        }
+
+        // Slower
+        int slowerBonus = 0;
+        if (ship.Speed < 2)
+        {
+            slowerBonus += 50;
+        }
+        else
+        {
+            Ship s1 = new Ship(0, ship.Orientation, 1, 0, 0, ship.X, ship.Y);
+            var newPost = s1.GetForward();
+            s1.X = newPost.Item1;
+            s1.Y = newPost.Item2;
+            slowerBonus = s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        }
+        if (bonus > slowerBonus)
+        {
+            Deb($"Slower bonus: {slowerBonus}");
+            bonus = fasterBonus;
+            action = "SLOWER";
+        }
+
+        // Left
+        Ship sLeft = new Ship(0, (ship.Orientation + 1) % 6, ship.Speed, 0, 0, ship.X, ship.Y);
+        int leftBonus = sLeft.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        if (bonus > leftBonus)
+        {
+            Deb($"Left bonus: {leftBonus}");
+            bonus = leftBonus;
+            action = "PORT";
+        }
+
+        // Right
+        Ship sRight = new Ship(0, (ship.Orientation - 1) % 6, ship.Speed, 0, 0, ship.X, ship.Y);
+        int rightBonus = sRight.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        if (bonus > rightBonus)
+        {
+            Deb($"Right bonus: {rightBonus}");
+            bonus = rightBonus;
+            action = "STARBOARD";
+        }
+
+        return action;
+    }
+
     static Tuple<int, int> GetClosestSafePosition(int x, int y)
     {
         var closeNodes = GetNextNodes(x, y);
@@ -492,6 +567,10 @@ class Player
                             var nextCase = myShip.GetForward();
                             if (nextCase.Item1 < 0 || nextCase.Item1 > 22 || nextCase.Item2 < 0 || nextCase.Item2 > 20)
                                 action = "PORT";
+                            else if (!CaseIsEmpty(nextCase.Item1, nextCase.Item2))
+                            {
+                                action = "STARBOARD";
+                            }
                             else
                                 action = "FASTER";
                         }
@@ -517,26 +596,14 @@ class Player
                 if (string.IsNullOrEmpty(action))
                 {
                     Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
-                    if (bar != null)
+                    if (bar != null) // Go for rhum
                     {
-                        var pathToBar = GetPath(myShip.X, myShip.Y, bar.X, bar.Y);
-                        DebList(pathToBar);
-                        var pathToBarNextMove = pathToBar.FirstOrDefault();
-                        var mineOnTheWay = mines.Where(x => pathToBar.Where(y => y.Item1 == x.X && y.Item2 == x.Y).Any());
-                        if (mineOnTheWay.Any())
-                        {
-                            // Shoot the mine on the way
-                            var theMine = mineOnTheWay.FirstOrDefault();
-                            action = $"FIRE {theMine.X} {theMine.Y}";
-                        }
-                        else
-                        {
-                            action = $"MOVE {bar.X} {bar.Y}";
-                        }
+                        string bestAction = BestActionToApproach(myShip, bar.X, bar.Y);
+                        action = bestAction;
                     }
-                    else
+                    else // No rhum left on the map
                     {
-                        // No rhum left on the map.
+
                         if (myShip.Rhum > ships.Where(x => x.Player == 0).Select(x => x.Rhum).Max())
                         {
                             // TODO: Avoid
