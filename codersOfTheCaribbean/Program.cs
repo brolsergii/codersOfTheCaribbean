@@ -139,11 +139,13 @@ class Barrel
         Capasity = capasity;
         X = x;
         Y = y;
+        Used = false;
     }
 
     public int Capasity;
     public int X;
     public int Y;
+    public bool Used;
 
     public override string ToString() => $"{Capasity} at ({X},{Y})";
 }
@@ -217,7 +219,7 @@ class Player
     {
         Barrel res = null;
         int minDist = int.MaxValue;
-        foreach (var bar in barrels)
+        foreach (var bar in barrels.Where(b => !b.Used))
         {
             int dist = HexagonDist(x, y, bar.X, bar.Y, currentOrientation);
             if (dist < minDist)
@@ -351,7 +353,7 @@ class Player
         return list;
     }
 
-    static string BestActionToApproach(Ship ship, int x, int y, int direction = 1)
+    static Tuple<string, int> BestActionToApproach(Ship ship, int x, int y, int direction = 1)
     {
         int bonus = int.MaxValue;
         string action = "MINE";
@@ -453,7 +455,7 @@ class Player
             action = "WAIT";
         }
 
-        return action;
+        return new Tuple<string, int>(action, bonus);
     }
 
     static int GetDamageInPos(Ship s)
@@ -545,6 +547,7 @@ class Player
                 }
             }
             #endregion
+
             foreach (var myShip in ships.Where(x => x.Player == 1))
             {
                 Deb($"Ship ({myShip.ID}) ({myShip})");
@@ -581,8 +584,17 @@ class Player
                     Ship rivalShip = FindShipToFire(myShip.X, myShip.Y);
                     if (rivalShip != null)
                     {
-                        Deb($"Enemy is close ({rivalShip.ID})...Fire!");
-                        action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                        var actionCandidat = BestActionToApproach(myShip, rivalShip.X, rivalShip.Y, (barrels.Count == 0 ? 1 : -1));
+                        if (actionCandidat.Item2 > 20) // Bomb or mine on the way
+                        {
+                            Deb($"Enemy is close ({rivalShip.ID}) but it's too dangerous {actionCandidat.Item2}");
+                            action = actionCandidat.Item1;
+                        }
+                        else
+                        {
+                            Deb($"Enemy is close ({rivalShip.ID})...Fire!");
+                            action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                        }
                     }
                     else
                     {
@@ -597,15 +609,16 @@ class Player
                     if (bar != null) // Go for rhum
                     {
                         Deb($"Looking for rhum in ({bar.X},{bar.Y})");
-                        string bestAction = BestActionToApproach(myShip, bar.X, bar.Y);
+                        bar.Used = true; // Avoid mutual blocks
+                        string bestAction = BestActionToApproach(myShip, bar.X, bar.Y).Item1;
                         action = bestAction;
                     }
                     else // No rhum left on the map
                     {
                         if (myShip.Rhum > ships.Where(x => x.Player == 0).Select(x => x.Rhum).Max())
                         {
-                            Deb($"My position is better, hiding from the enemy");
                             // Avoid (best action to hide)
+                            Deb($"My position is better, hiding from the enemy");
                             if (mineCooldown[myShip.ID] <= 0)
                             {
                                 Deb("Mine the escapeway");
@@ -615,7 +628,7 @@ class Player
                             else
                             {
                                 var victim = FindClosestRival(myShip.X, myShip.Y, myShip.Orientation);
-                                string bestAction = BestActionToApproach(myShip, victim.X, victim.Y, -1);
+                                string bestAction = BestActionToApproach(myShip, victim.X, victim.Y, -1).Item1;
                                 action = bestAction;
                             }
                         }
@@ -624,7 +637,7 @@ class Player
                             // Attack
                             Deb($"My position is better, attacking the enemy");
                             var victim = FindClosestRival(myShip.X, myShip.Y, myShip.Orientation);
-                            string bestAction = BestActionToApproach(myShip, victim.X, victim.Y);
+                            string bestAction = BestActionToApproach(myShip, victim.X, victim.Y).Item1;
                             action = bestAction;
                         }
                     }
