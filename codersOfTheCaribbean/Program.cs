@@ -57,6 +57,46 @@ class Ship
         return positions;
     }
 
+    public List<Tuple<int, int>> GetPositionsNoTail()
+    {
+        List<Tuple<int, int>> positions = new List<Tuple<int, int>>();
+        positions.Add(new Tuple<int, int>(X, Y));
+        if (Orientation == 0)
+            positions.Add(new Tuple<int, int>(X + 1, Y));
+        if (Orientation == 3)
+            positions.Add(new Tuple<int, int>(X - 1, Y));
+
+        if (Orientation == 1)
+        {
+            if (Y % 2 == 0)
+                positions.Add(new Tuple<int, int>(X, Y - 1));
+            else
+                positions.Add(new Tuple<int, int>(X + 1, Y - 1));
+        }
+        if (Orientation == 4)
+        {
+            if (Y % 2 == 0)
+                positions.Add(new Tuple<int, int>(X - 1, Y + 1));
+            else
+                positions.Add(new Tuple<int, int>(X, Y + 1));
+        }
+        if (Orientation == 2)
+        {
+            if (Y % 2 == 0)
+                positions.Add(new Tuple<int, int>(X - 1, Y - 1));
+            else
+                positions.Add(new Tuple<int, int>(X, Y - 1));
+        }
+        if (Orientation == 5)
+        {
+            if (Y % 2 == 0)
+                positions.Add(new Tuple<int, int>(X, Y + 1));
+            else
+                positions.Add(new Tuple<int, int>(X + 1, Y + 1));
+        }
+        return positions;
+    }
+
     public Tuple<int, int> GetForward(int x = -1, int y = -1, bool first = true)
     {
         Tuple<int, int> res = null;
@@ -149,7 +189,7 @@ class Player
         foreach (var pair in d)
             Console.Error.WriteLine($"[{pair.Key}]:{pair.Value}");
     }
-    static int HexagonDist(int x1, int y1, int x2, int y2)
+    static int HexagonDist(int x1, int y1, int x2, int y2, int orientation = 0)
     {
         int a1 = x1 - (int)Math.Floor((double)y1 / 2);
         int b1 = y1;
@@ -157,7 +197,8 @@ class Player
         int b2 = y2;
         int dx = a1 - a2;
         int dy = b1 - b2;
-        return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy)));
+
+        return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy))) + Math.Abs(orientation - GetOrientation(x1, y1, x2, y2));
     }
     #endregion
 
@@ -208,7 +249,7 @@ class Player
         int dist = int.MaxValue;
         foreach (var rivalShip in ships.Where(s => s.Player == 0 && !s.UnderAttack))
         {
-            int newDist = HexagonDist(x, y, rivalShip.X, rivalShip.Y);
+            int newDist = HexagonDist(x, y, rivalShip.X, rivalShip.Y, GetOrientation(x, y, rivalShip.X, rivalShip.Y));
             if (newDist < dist && newDist <= MaxFireDistance)
             {
                 dist = newDist;
@@ -228,6 +269,48 @@ class Player
         if (cannonBalls.Where(s => s.X == x && s.Y == y && s.TimeLeft == 1).Any())
             return false;
         return true;
+    }
+
+    static int GetOrientation(int x1, int y1, int x2, int y2)
+    {
+        if (x2 - x1 == 1 && y1 == y2)
+            return 0;
+        if (x2 - x1 == -1 && y1 == y2)
+            return 3;
+        if (y1 % 2 == 0)
+        {
+            if (x2 - x1 == 0)
+            {
+                if (y2 - y1 == -1)
+                    return 1;
+                else
+                    return 5;
+            }
+            else
+            {
+                if (y2 - y1 == -1)
+                    return 2;
+                else
+                    return 4;
+            }
+        }
+        else
+        {
+            if (x2 - x1 == 0)
+            {
+                if (y2 - y1 == -1)
+                    return 2;
+                else
+                    return 4;
+            }
+            else
+            {
+                if (y2 - y1 == -1)
+                    return 1;
+                else
+                    return 5;
+            }
+        }
     }
 
     static Tuple<int, int> MoveCanProvokeMineExplosion(int x1, int y1, int x2, int y2)
@@ -379,75 +462,122 @@ class Player
     {
         int bonus = int.MaxValue;
         string action = "WAIT";
-
-        // There are 4 actions possible 
+        Tuple<int, int> newPos;
+        Ship s1 = null;
+        // There are 5 actions possible 
         // Faster
         int fasterBonus = 0;
+        s1 = new Ship(0, ship.Orientation, 2, 0, 0, ship.X, ship.Y);
         if (ship.Speed == 0)
         {
             fasterBonus -= 50;
         }
         if (ship.Speed == 1)
         {
-            Ship s1 = new Ship(0, ship.Orientation, 2, 0, 0, ship.X, ship.Y);
-            var newPost = s1.GetForward();
-            s1.X = newPost.Item1;
-            s1.Y = newPost.Item2;
-            fasterBonus = s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+            newPos = s1.GetForward();
+            s1.X = newPos.Item1;
+            s1.Y = newPos.Item2;
+            fasterBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
+            fasterBonus += GetDamageInPos(s1);
         }
         if (ship.Speed == 2)
         {
             fasterBonus += 50;
         }
+        Deb($"Faster bonus: {fasterBonus} | {s1.Orientation}");
+        DebList(s1.GetPositions());
         if (bonus > fasterBonus)
         {
-            Deb($"Faster bonus: {fasterBonus}");
             bonus = fasterBonus;
             action = "FASTER";
         }
 
         // Slower
         int slowerBonus = 0;
+        s1 = new Ship(0, ship.Orientation, 1, 0, 0, ship.X, ship.Y);
         if (ship.Speed < 2)
         {
             slowerBonus += 50;
         }
         else
         {
-            Ship s1 = new Ship(0, ship.Orientation, 1, 0, 0, ship.X, ship.Y);
-            var newPost = s1.GetForward();
-            s1.X = newPost.Item1;
-            s1.Y = newPost.Item2;
-            slowerBonus = s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+            newPos = s1.GetForward();
+            s1.X = newPos.Item1;
+            s1.Y = newPos.Item2;
+            slowerBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
+            slowerBonus += GetDamageInPos(s1);
         }
+        Deb($"Slower bonus: {slowerBonus} | {s1.Orientation}");
+        DebList(s1.GetPositions());
         if (bonus > slowerBonus)
         {
-            Deb($"Slower bonus: {slowerBonus}");
             bonus = fasterBonus;
             action = "SLOWER";
         }
 
         // Left
-        Ship sLeft = new Ship(0, (ship.Orientation + 1) % 6, ship.Speed, 0, 0, ship.X, ship.Y);
-        int leftBonus = sLeft.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
+        newPos = s1.GetForward();
+        s1.X = newPos.Item1;
+        s1.Y = newPos.Item2;
+        int leftBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, (s1.Orientation + 1) % 6)).Min();
+        leftBonus += GetDamageInPos(s1);
+        Deb($"Left bonus: {leftBonus} | {(s1.Orientation + 1) % 6}");
+        DebList(s1.GetPositions());
         if (bonus > leftBonus)
         {
-            Deb($"Left bonus: {leftBonus}");
             bonus = leftBonus;
             action = "PORT";
         }
 
         // Right
-        Ship sRight = new Ship(0, (ship.Orientation - 1) % 6, ship.Speed, 0, 0, ship.X, ship.Y);
-        int rightBonus = sRight.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y)).Min();
+        s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
+        newPos = s1.GetForward();
+        s1.X = newPos.Item1;
+        s1.Y = newPos.Item2;
+        int rightBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, (ship.Orientation - 1) % 6)).Min();
+        rightBonus += GetDamageInPos(s1);
+        Deb($"Right bonus: {rightBonus} | {(s1.Orientation - 1) % 6}");
+        DebList(s1.GetPositions());
         if (bonus > rightBonus)
         {
-            Deb($"Right bonus: {rightBonus}");
             bonus = rightBonus;
             action = "STARBOARD";
         }
 
+        // Wait
+        s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
+        newPos = s1.GetForward();
+        s1.X = newPos.Item1;
+        s1.Y = newPos.Item2;
+        int waitBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, ship.Orientation)).Min();
+        waitBonus += GetDamageInPos(s1);
+        Deb($"Wait bonus: {waitBonus} | {s1.Orientation}");
+        DebList(s1.GetPositions());
+        if (bonus > waitBonus)
+        {
+            bonus = waitBonus;
+            action = "WAIT";
+        }
+
         return action;
+    }
+
+    static int GetDamageInPos(Ship s)
+    {
+        int damage = 0;
+        foreach (var pos in s.GetPositions())
+        {
+            if (mines.Where(x => x.X == s.X && x.Y == s.Y).Any())
+                damage += 50;
+            if (cannonBalls.Where(x => x.X == s.X && x.Y == s.Y && x.TimeLeft <= 2).Any())
+                damage += 25;
+            if (pos.Item1 > 21 || pos.Item1 < 0 || pos.Item2 < 0 || pos.Item2 > 19)
+            {
+                damage += 10;
+            }
+        }
+        return damage;
     }
 
     static Tuple<int, int> GetClosestSafePosition(int x, int y)
@@ -522,10 +652,11 @@ class Player
             }
             foreach (var myShip in ships.Where(x => x.Player == 1))
             {
-                Deb($"Ship ({myShip.ID})");
+                Deb($"Ship ({myShip.ID}) ({myShip})");
                 string action = "";
 
                 // Save youself from cannonballs
+                /*
                 if (string.IsNullOrEmpty(action))
                 {
                     var newShipPos = myShip.GetForward();
@@ -555,7 +686,7 @@ class Player
                                 action = "STARBOARD";
                         }
                     }
-                }
+                }*/
 
                 // Deblock
                 if (string.IsNullOrEmpty(action))
@@ -598,6 +729,7 @@ class Player
                     Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
                     if (bar != null) // Go for rhum
                     {
+                        Deb($"Looking for rhum in ({bar.X},{bar.Y})");
                         string bestAction = BestActionToApproach(myShip, bar.X, bar.Y);
                         action = bestAction;
                     }
