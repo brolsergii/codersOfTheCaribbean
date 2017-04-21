@@ -189,7 +189,7 @@ class Player
         foreach (var pair in d)
             Console.Error.WriteLine($"[{pair.Key}]:{pair.Value}");
     }
-    static int HexagonDist(int x1, int y1, int x2, int y2, int orientation = 0)
+    static int HexagonDist(int x1, int y1, int x2, int y2, int orientation = -1)
     {
         int a1 = x1 - (int)Math.Floor((double)y1 / 2);
         int b1 = y1;
@@ -198,7 +198,8 @@ class Player
         int dx = a1 - a2;
         int dy = b1 - b2;
 
-        return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy))) + Math.Abs(orientation - GetOrientation(x1, y1, x2, y2));
+        return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy)))
+               + ((orientation == -1) ? 0 : 3 * Math.Abs(orientation - GetOrientation(x1, y1, x2, y2)));
     }
     #endregion
 
@@ -209,15 +210,16 @@ class Player
     static List<Mine> mines = new List<Mine>();
     static List<CannonBall> cannonBalls = new List<CannonBall>();
     static Dictionary<int, Tuple<int, int>> oldPositions = new Dictionary<int, Tuple<int, int>>();
+    static Dictionary<int, int> mineCooldown = new Dictionary<int, int>();
     #endregion
 
-    static Barrel FindClosestBarrel(int x, int y)
+    static Barrel FindClosestBarrel(int x, int y, int currentOrientation)
     {
         Barrel res = null;
         int minDist = int.MaxValue;
         foreach (var bar in barrels)
         {
-            int dist = HexagonDist(x, y, bar.X, bar.Y);
+            int dist = HexagonDist(x, y, bar.X, bar.Y, currentOrientation);
             if (dist < minDist)
             {
                 minDist = dist;
@@ -227,13 +229,13 @@ class Player
         return res;
     }
 
-    static Ship FindClosestRival(int x, int y)
+    static Ship FindClosestRival(int x, int y, int currentOrientation)
     {
         Ship res = null;
         int minDist = int.MaxValue;
         foreach (var ship in ships.Where(s => s.Player == 0))
         {
-            int dist = HexagonDist(x, y, ship.X, ship.Y);
+            int dist = HexagonDist(x, y, ship.X, ship.Y, currentOrientation);
             if (dist < minDist)
             {
                 minDist = dist;
@@ -249,11 +251,10 @@ class Player
         int dist = int.MaxValue;
         foreach (var rivalShip in ships.Where(s => s.Player == 0 && !s.UnderAttack))
         {
-            int newDist = HexagonDist(x, y, rivalShip.X, rivalShip.Y, GetOrientation(x, y, rivalShip.X, rivalShip.Y));
+            int newDist = HexagonDist(x, y, rivalShip.X, rivalShip.Y);
             if (newDist < dist && newDist <= MaxFireDistance)
             {
                 dist = newDist;
-                //rivalShip.UnderAttack = true; // no need
                 res = rivalShip;
             }
         }
@@ -273,22 +274,23 @@ class Player
 
     static int GetOrientation(int x1, int y1, int x2, int y2)
     {
-        if (x2 - x1 == 1 && y1 == y2)
+
+        if (x2 >= x1 && y1 == y2)
             return 0;
-        if (x2 - x1 == -1 && y1 == y2)
+        if (x2 < x1 && y1 == y2)
             return 3;
         if (y1 % 2 == 0)
         {
-            if (x2 - x1 == 0)
+            if (x2 == x1)
             {
-                if (y2 - y1 == -1)
+                if (y2 < y1)
                     return 1;
                 else
                     return 5;
             }
             else
             {
-                if (y2 - y1 == -1)
+                if (y2 < y1)
                     return 2;
                 else
                     return 4;
@@ -296,16 +298,16 @@ class Player
         }
         else
         {
-            if (x2 - x1 == 0)
+            if (x2 == x1)
             {
-                if (y2 - y1 == -1)
+                if (y2 < y1)
                     return 2;
                 else
                     return 4;
             }
             else
             {
-                if (y2 - y1 == -1)
+                if (y2 < y1)
                     return 1;
                 else
                     return 5;
@@ -313,76 +315,12 @@ class Player
         }
     }
 
-    static Tuple<int, int> MoveCanProvokeMineExplosion(int x1, int y1, int x2, int y2)
+    static int GetNextOrientation(int orientation, int diff)
     {
-        int x3 = x2;
-        int y3 = y2;
-        if (x2 - x1 == 1 && y1 == y2)
-        {
-            x3 = x2 + 1;
-        }
-        if (x2 - x1 == 1 && y1 == y2)
-        {
-            x3 = x2 - 1;
-        }
-        if (y1 % 2 == 0)
-        {
-            if (x2 - x1 == -1)
-            {
-                if (y2 - y1 == -1)
-                {
-                    x3 = x2 - 1;
-                    y3 = y2 - 1;
-                }
-                if (y2 - y1 == 1)
-                {
-                    x3 = x2 - 1;
-                    y3 = y2 + 1;
-                }
-            }
-            if (x2 - x1 == 0)
-            {
-                if (y2 - y1 == -1)
-                {
-                    y3 = y2 - 1;
-                }
-                if (y2 - y1 == 1)
-                {
-                    y3 = y2 + 1;
-                }
-            }
-        }
-        if (y1 % 2 == 1)
-        {
-            if (x2 - x1 == 1)
-            {
-                if (y2 - y1 == -1)
-                {
-                    x3 = x2 + 1;
-                    y3 = y2 - 1;
-                }
-                if (y2 - y1 == 1)
-                {
-                    x3 = x2 + 1;
-                    y3 = y2 + 1;
-                }
-            }
-            if (x2 - x1 == 0)
-            {
-                if (y2 - y1 == -1)
-                {
-                    y3 = y2 - 1;
-                }
-                if (y2 - y1 == 1)
-                {
-                    y3 = y2 + 1;
-                }
-            }
-        }
-        var bombOnTheWay = mines.Where(x => x.X == x3 && x.Y == y3);
-        if (bombOnTheWay.Any())
-            bombOnTheWay.FirstOrDefault();
-        return null;
+        int resOrientation = (orientation + diff) % 6;
+        if (resOrientation == -1)
+            resOrientation = 5;
+        return resOrientation;
     }
 
     static List<Tuple<int, int>> GetNextNodes(int x, int y)
@@ -413,55 +351,10 @@ class Player
         return list;
     }
 
-    static List<Tuple<int, int>> GetPath(int x1, int y1, int x2, int y2)
-    {
-        //Deb($"From ({x1},{y1}) to ({x2},{y2})");
-        List<Tuple<int, int>> allNodes = new List<Tuple<int, int>>();
-        List<Tuple<int, int>> queueNodes = new List<Tuple<int, int>>();
-        Dictionary<Tuple<int, int>, Tuple<int, int>> fromTo = new Dictionary<Tuple<int, int>, Tuple<int, int>>();
-        allNodes.Add(new Tuple<int, int>(x1, y1));
-        queueNodes.Add(new Tuple<int, int>(x1, y1));
-        Tuple<int, int> currentNode;
-        while (queueNodes.Count > 0)
-        {
-            currentNode = queueNodes.OrderBy(x => HexagonDist(x.Item1, x.Item2, x2, y2)).First();
-            queueNodes.Remove(currentNode);
-            if (currentNode.Item1 == x2 && currentNode.Item2 == y2)
-            {
-                break;
-            }
-            var nextNodes = GetNextNodes(currentNode.Item1, currentNode.Item2).Where(s => CaseIsEmpty(s.Item1, s.Item2));
-            foreach (var node in nextNodes)
-            {
-                if (!allNodes.Contains(node))
-                {
-                    fromTo[node] = currentNode;
-                    queueNodes.Add(node);
-                    allNodes.Add(node);
-                }
-            }
-        }
-        var res = new List<Tuple<int, int>>();
-        Tuple<int, int> cNode = new Tuple<int, int>(x2, y2);
-        while (!(cNode.Item1 == x1 && cNode.Item2 == y1))
-        {
-            //Deb(cNode);
-            res.Add(cNode);
-            if (!fromTo.ContainsKey(cNode))
-            {
-                Deb($"No path found from ({x1},{y1}) to ({x2},{y2})");
-                return new List<Tuple<int, int>>() { new Tuple<int, int>(x2, y2) };
-            }
-            cNode = fromTo[cNode];
-        }
-        res.Reverse();
-        return res;
-    }
-
-    static string BestActionToApproach(Ship ship, int x, int y)
+    static string BestActionToApproach(Ship ship, int x, int y, int direction = 1)
     {
         int bonus = int.MaxValue;
-        string action = "WAIT";
+        string action = "MINE";
         Tuple<int, int> newPos;
         Ship s1 = null;
         // There are 5 actions possible 
@@ -477,14 +370,14 @@ class Player
             newPos = s1.GetForward();
             s1.X = newPos.Item1;
             s1.Y = newPos.Item2;
-            fasterBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
+            fasterBonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
             fasterBonus += GetDamageInPos(s1);
         }
         if (ship.Speed == 2)
         {
             fasterBonus += 50;
         }
-        Deb($"Faster bonus: {fasterBonus} | {s1.Orientation}");
+        Deb($"Faster bonus: {fasterBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
         DebList(s1.GetPositions());
         if (bonus > fasterBonus)
         {
@@ -504,14 +397,14 @@ class Player
             newPos = s1.GetForward();
             s1.X = newPos.Item1;
             s1.Y = newPos.Item2;
-            slowerBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
+            slowerBonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
             slowerBonus += GetDamageInPos(s1);
         }
-        Deb($"Slower bonus: {slowerBonus} | {s1.Orientation}");
+        Deb($"Slower bonus: {slowerBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
         DebList(s1.GetPositions());
         if (bonus > slowerBonus)
         {
-            bonus = fasterBonus;
+            bonus = slowerBonus;
             action = "SLOWER";
         }
 
@@ -520,9 +413,9 @@ class Player
         newPos = s1.GetForward();
         s1.X = newPos.Item1;
         s1.Y = newPos.Item2;
-        int leftBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, (s1.Orientation + 1) % 6)).Min();
+        int leftBonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, GetNextOrientation(s1.Orientation, +1))).Min();
         leftBonus += GetDamageInPos(s1);
-        Deb($"Left bonus: {leftBonus} | {(s1.Orientation + 1) % 6}");
+        Deb($"Left bonus: {leftBonus} including damage ({GetDamageInPos(s1)}) | {GetNextOrientation(s1.Orientation, +1)}");
         DebList(s1.GetPositions());
         if (bonus > leftBonus)
         {
@@ -535,9 +428,9 @@ class Player
         newPos = s1.GetForward();
         s1.X = newPos.Item1;
         s1.Y = newPos.Item2;
-        int rightBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, (ship.Orientation - 1) % 6)).Min();
+        int rightBonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, GetNextOrientation(s1.Orientation, -1))).Min();
         rightBonus += GetDamageInPos(s1);
-        Deb($"Right bonus: {rightBonus} | {(s1.Orientation - 1) % 6}");
+        Deb($"Right bonus: {rightBonus} including damage ({GetDamageInPos(s1)}) | {GetNextOrientation(s1.Orientation, -1)}");
         DebList(s1.GetPositions());
         if (bonus > rightBonus)
         {
@@ -550,9 +443,9 @@ class Player
         newPos = s1.GetForward();
         s1.X = newPos.Item1;
         s1.Y = newPos.Item2;
-        int waitBonus = s1.GetPositionsNoTail().Select(c => HexagonDist(c.Item1, c.Item2, x, y, ship.Orientation)).Min();
+        int waitBonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, ship.Orientation)).Min();
         waitBonus += GetDamageInPos(s1);
-        Deb($"Wait bonus: {waitBonus} | {s1.Orientation}");
+        Deb($"Wait bonus: {waitBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
         DebList(s1.GetPositions());
         if (bonus > waitBonus)
         {
@@ -569,9 +462,9 @@ class Player
         foreach (var pos in s.GetPositions())
         {
             if (mines.Where(x => x.X == s.X && x.Y == s.Y).Any())
-                damage += 50;
-            if (cannonBalls.Where(x => x.X == s.X && x.Y == s.Y && x.TimeLeft <= 2).Any())
-                damage += 25;
+                damage += 60;
+            if (cannonBalls.Where(x => x.X == s.X && x.Y == s.Y && x.TimeLeft <= 1).Any())
+                damage += 30;
             if (pos.Item1 > 21 || pos.Item1 < 0 || pos.Item2 < 0 || pos.Item2 > 19)
             {
                 damage += 10;
@@ -604,6 +497,7 @@ class Player
     {
         while (true)
         {
+            #region init parse state
             ships.Clear();
             barrels.Clear();
             mines.Clear();
@@ -650,43 +544,16 @@ class Player
                         }
                 }
             }
+            #endregion
             foreach (var myShip in ships.Where(x => x.Player == 1))
             {
                 Deb($"Ship ({myShip.ID}) ({myShip})");
                 string action = "";
 
-                // Save youself from cannonballs
-                /*
-                if (string.IsNullOrEmpty(action))
-                {
-                    var newShipPos = myShip.GetForward();
-                    var newShip = new Ship(myShip.ID, myShip.Orientation, myShip.Speed, 0, 0, newShipPos.Item1, newShipPos.Item2);
-                    var shipPos = newShip.GetPositions();
-                    bool isSafe = true;
-                    foreach (var sp in shipPos)
-                        if (!CaseIsEmpty(sp.Item1, sp.Item2))
-                            isSafe = false;
-                    if (!isSafe)
-                    {
-                        newShip.Orientation = (newShip.Orientation + 1) % 6;
-                        isSafe = true;
-                        foreach (var sp in shipPos)
-                            if (!CaseIsEmpty(sp.Item1, sp.Item2))
-                                isSafe = false;
-                        if (isSafe)
-                            action = "PORT";
-                        else
-                        {
-                            newShip.Orientation = (newShip.Orientation - 2) % 6;
-                            isSafe = true;
-                            foreach (var sp in shipPos)
-                                if (!CaseIsEmpty(sp.Item1, sp.Item2))
-                                    isSafe = false;
-                            if (isSafe)
-                                action = "STARBOARD";
-                        }
-                    }
-                }*/
+                if (!mineCooldown.ContainsKey(myShip.ID))
+                    mineCooldown[myShip.ID] = 0;
+                else
+                    mineCooldown[myShip.ID]--;
 
                 // Deblock
                 if (string.IsNullOrEmpty(action))
@@ -726,7 +593,7 @@ class Player
                 // Go for rhum
                 if (string.IsNullOrEmpty(action))
                 {
-                    Barrel bar = FindClosestBarrel(myShip.X, myShip.Y);
+                    Barrel bar = FindClosestBarrel(myShip.X, myShip.Y, myShip.Orientation);
                     if (bar != null) // Go for rhum
                     {
                         Deb($"Looking for rhum in ({bar.X},{bar.Y})");
@@ -735,18 +602,30 @@ class Player
                     }
                     else // No rhum left on the map
                     {
-
                         if (myShip.Rhum > ships.Where(x => x.Player == 0).Select(x => x.Rhum).Max())
                         {
-                            // TODO: Avoid
-                            var victim = FindClosestRival(myShip.X, myShip.Y);
-                            action = $"MOVE {victim.X} {victim.Y}";
+                            Deb($"My position is better, hiding from the enemy");
+                            // Avoid (best action to hide)
+                            if (mineCooldown[myShip.ID] <= 0)
+                            {
+                                Deb("Mine the escapeway");
+                                action = "MINE";
+                                mineCooldown[myShip.ID] = 4;
+                            }
+                            else
+                            {
+                                var victim = FindClosestRival(myShip.X, myShip.Y, myShip.Orientation);
+                                string bestAction = BestActionToApproach(myShip, victim.X, victim.Y, -1);
+                                action = bestAction;
+                            }
                         }
                         else
                         {
                             // Attack
-                            var victim = FindClosestRival(myShip.X, myShip.Y);
-                            action = $"MOVE {victim.X} {victim.Y}";
+                            Deb($"My position is better, attacking the enemy");
+                            var victim = FindClosestRival(myShip.X, myShip.Y, myShip.Orientation);
+                            string bestAction = BestActionToApproach(myShip, victim.X, victim.Y);
+                            action = bestAction;
                         }
                     }
                 }
