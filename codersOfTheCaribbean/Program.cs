@@ -102,6 +102,8 @@ class Ship
     public Tuple<int, int> GetForward(int x = -1, int y = -1, bool first = true)
     {
         Tuple<int, int> res = null;
+        if (Speed == 0)
+            return new Tuple<int, int>(X, Y);
         if (x == -1) { x = X; }
         if (y == -1) { y = Y; }
         if (Orientation == 0)
@@ -274,9 +276,11 @@ class MainPlayer
         return res;
     }
 
-    static bool CaseIsEmpty(int x, int y)
+    static bool CaseIsEmpty(int x, int y, int id = -1)
     {
-        if (ships.Where(s => s.GetPositions().Select(xp => xp.Item1).Contains(x) && s.GetPositions().Select(xp => xp.Item2).Contains(y) && s.Player == 0).Any())
+        if (x < 0 || y < 0 || x > 22 || y > 20)
+            return false;
+        if (ships.Where(s => s.ID != id && s.GetPositions().Select(xp => xp.Item1).Contains(x) && s.GetPositions().Select(xp => xp.Item2).Contains(y)).Any())
             return false;
         if (mines.Where(s => s.X == x && s.Y == y).Any())
             return false;
@@ -390,7 +394,7 @@ class MainPlayer
             fasterBonus -= 50;
         if (ship.Speed == 1)
             fasterBonus = GetShipsNextTurn(s1, x, y, s1.Orientation, direction).Item2;
-        if (ship.Speed == 2)
+        if (ship.Speed == 2 || (HexagonDist(x, y, s1.X, s1.Y) <= 2 && ship.Speed > 0))
             fasterBonus += 50;
         Deb($"Faster bonus: {fasterBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
         DebList(s1.GetPositions(true));
@@ -402,7 +406,7 @@ class MainPlayer
 
         // Slower
         int slowerBonus = 0;
-        s1 = new Ship(0, ship.Orientation, 1, 0, 0, ship.X, ship.Y);
+        s1 = new Ship(0, ship.Orientation, ship.Speed - 1, 0, 0, ship.X, ship.Y);
         if (ship.Speed < 2)
             slowerBonus += 50;
         else
@@ -460,10 +464,6 @@ class MainPlayer
                 damage += 60;
             if (cannonBalls.Where(x => x.X == pos.Item1 && x.Y == pos.Item2 && x.TimeLeft <= 2).Any())
                 damage += 25;
-            if (pos.Item1 > 21 || pos.Item1 < 0 || pos.Item2 < 0 || pos.Item2 > 19)
-            {
-                damage += 10;
-            }
             foreach (var ship in ships.Where(s2 => s2.ID != s.ID))
             {
                 if (HexagonDist(s.X, s.Y, ship.X, ship.Y) < 1)
@@ -563,16 +563,31 @@ class MainPlayer
                     {
                         if (oldPositions[myShip.ID].Item1 == myShip.X && oldPositions[myShip.ID].Item2 == myShip.Y)
                         {
-                            Deb($"The ship is blocked, trying to deblock");
-                            var nextCase = myShip.GetForward();
-                            if (nextCase.Item1 < 0 || nextCase.Item1 > 22 || nextCase.Item2 < 0 || nextCase.Item2 > 20)
-                                action = "PORT";
-                            else if (!CaseIsEmpty(nextCase.Item1, nextCase.Item2))
+                            Deb($"The ship is blocked, trying to unblock {oldPositions[myShip.ID]}");
+                            Ship nextShip = new Ship(0, myShip.Orientation, 1, 0, 0, myShip.X, myShip.Y);
+                            var nextCase = nextShip.GetForward();
+                            nextShip.X = nextCase.Item1;
+                            nextShip.Y = nextCase.Item2;
+                            var frontCase = nextShip.GetForward();
+                            if (CaseIsEmpty(nextCase.Item1, nextCase.Item2, myShip.ID)&&
+                                CaseIsEmpty(frontCase.Item1, frontCase.Item2, myShip.ID))
                             {
-                                action = "STARBOARD";
+                                Deb($"Case in front is Empty ({nextCase.Item1},{nextCase.Item2} && ({frontCase.Item1},{frontCase.Item2}))");
+                                action = "FASTER";
                             }
                             else
-                                action = "FASTER";
+                            {
+                                Deb($"Case in front is not Empty ({nextCase.Item1},{nextCase.Item2})");
+                                //var positions = myShip.GetPositionsNoTail();
+                                //int orientation = GetOrientation(positions[0].Item1, positions[0].Item2, positions[1].Item1, positions[1].Item2);
+                                //Deb($"Front {positions[0]} middle {positions[1]}");
+
+                                if ((myShip.X > 10 && myShip.Y < 10) || (myShip.X < 10 && myShip.Y > 10))
+                                    action = "STARBOARD";
+                                else
+                                    action = "PORT";
+                            }
+
                         }
                     }
                 }
@@ -584,15 +599,19 @@ class MainPlayer
                     if (rivalShip != null)
                     {
                         var actionCandidat = BestActionToApproach(myShip, rivalShip.X, rivalShip.Y, (barrels.Count == 0 ? 1 : -1));
-                        if (actionCandidat.Item2 > 20) // Bomb or mine on the way
+                        Ship nextShip = GetShipsNextTurn(myShip, rivalShip.X, rivalShip.Y, myShip.Orientation, -1).Item1;
+                        Deb($"Considering to {actionCandidat.Item1} ({actionCandidat.Item2})");
+                        var nextActionCandidat = BestActionToApproach(nextShip, rivalShip.X, rivalShip.Y, -1);
+                        if (nextActionCandidat.Item2 > 20) // Bomb or mine on the way
                         {
                             Deb($"Enemy is close ({rivalShip.ID}) but it's too dangerous {actionCandidat.Item2}");
                             action = actionCandidat.Item1;
                         }
                         else
                         {
+                            var frontOfRivalShip = rivalShip.GetForward();
                             Deb($"Enemy is close ({rivalShip.ID})...Fire!");
-                            action = $"FIRE {rivalShip.X} {rivalShip.Y}";
+                            action = $"FIRE {frontOfRivalShip.Item1} {frontOfRivalShip.Item2}";
                         }
                     }
                     else
@@ -618,7 +637,8 @@ class MainPlayer
                         {
                             // Avoid (best action to hide)
                             var victim = FindClosestRival(myShip.X, myShip.Y, myShip.Orientation);
-                            var bestActionCandidat = BestActionToApproach(myShip, victim.X, victim.Y, -1);
+                            Ship nextShip = GetShipsNextTurn(myShip, victim.X, victim.Y, myShip.Orientation, -1).Item1;
+                            var bestActionCandidat = BestActionToApproach(nextShip, victim.X, victim.Y, -1);
                             Deb($"My position is better, hiding from the enemy");
                             if (mineCooldown[myShip.ID] <= 0 && bestActionCandidat.Item2 < 20) // no bomb or mine on the way
                             {
