@@ -676,7 +676,7 @@ class MainPlayer
                             Ship nextShip = GetShipsNextTurn(myShip, victim.X, victim.Y, myShip.Orientation, -1).Item1;
                             var bestActionCandidat = BestActionToApproach(nextShip, victim.X, victim.Y, -1);
                             Deb($"My position is better, hiding from the enemy");
-                            if (mineCooldown[myShip.ID] <= 0 && bestActionCandidat.Item2 < 20) // no bomb or mine on the way
+                            if (mineCooldown[myShip.ID] <= 0 && bestActionCandidat.Item2 < 15) // no bomb or mine on the way
                             {
                                 Deb("Mine the escapeway");
                                 action = "MINE";
