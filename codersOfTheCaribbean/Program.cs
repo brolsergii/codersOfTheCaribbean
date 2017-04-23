@@ -601,8 +601,8 @@ class MainPlayer
                         var actionCandidat = BestActionToApproach(myShip, rivalShip.X, rivalShip.Y, (barrels.Count == 0 ? 1 : -1));
                         Ship nextShip = GetShipsNextTurn(myShip, rivalShip.X, rivalShip.Y, myShip.Orientation, -1).Item1;
                         Deb($"Considering to {actionCandidat.Item1} ({actionCandidat.Item2})");
-                        var nextActionCandidat = BestActionToApproach(nextShip, rivalShip.X, rivalShip.Y, -1);
-                        if (nextActionCandidat.Item2 > 20) // Bomb or mine on the way
+                        //var nextActionCandidat = BestActionToApproach(nextShip, rivalShip.X, rivalShip.Y, -1);
+                        if (actionCandidat.Item2 > 20) // Bomb or mine on the way
                         {
                             Deb($"Enemy is close ({rivalShip.ID}) but it's too dangerous {actionCandidat.Item2}");
                             action = actionCandidat.Item1;
