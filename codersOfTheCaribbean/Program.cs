@@ -214,7 +214,17 @@ class MainPlayer
         int dy = b1 - b2;
 
         return Math.Max(Math.Abs(dx), Math.Max(Math.Abs(dy), Math.Abs(dx + dy)))
-               + ((orientation == -1) ? 0 : 3 * Math.Abs(orientation - GetOrientation(x1, y1, x2, y2)));
+               + ((orientation == -1) ? 0 : 3 * OrientationDist(orientation, GetOrientation(x1, y1, x2, y2)));
+    }
+    static int OrientationDist(int or1, int or2)
+    {
+        int min = (or1 < or2) ? or1 : or2;
+        int max = (or1 < or2) ? or2 : or1;
+        if (min == 1 && max == 5)
+            return 2;
+        if (min == 0 && max >= 4)
+            return 6 - max;
+        return max - min;
     }
     #endregion
 
@@ -374,10 +384,12 @@ class MainPlayer
         Tuple<int, int> newPos = s1.GetForward();
         s1.X = newPos.Item1;
         s1.Y = newPos.Item2;
+        bool turn = s1.Orientation != newOrientation;
         s1.Orientation = newOrientation;
-        bonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
-        bonus += GetDamageInPos(s1);
-
+        int tmpbonus = direction * s1.GetPositions().Select(c => HexagonDist(c.Item1, c.Item2, x, y, s1.Orientation)).Min();
+        int tmp2bonus = GetDamageInPos(s1);
+        bonus += tmpbonus + tmp2bonus;
+        Deb($"Bonus distance {tmpbonus}; damage {tmp2bonus}");
         return new Tuple<Ship, int>(s1, bonus);
     }
 
@@ -396,8 +408,8 @@ class MainPlayer
             fasterBonus = GetShipsNextTurn(s1, x, y, s1.Orientation, direction).Item2;
         if (ship.Speed == 2 || (HexagonDist(x, y, s1.X, s1.Y) <= 2 && ship.Speed > 0))
             fasterBonus += 50;
-        Deb($"Faster bonus: {fasterBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
-        DebList(s1.GetPositions(true));
+        Deb($"Faster bonus: {fasterBonus} | {s1.Orientation}");
+        DebList(s1.GetPositions());
         if (bonus > fasterBonus)
         {
             bonus = fasterBonus;
@@ -411,8 +423,8 @@ class MainPlayer
             slowerBonus += 50;
         else
             slowerBonus = GetShipsNextTurn(s1, x, y, s1.Orientation, direction).Item2;
-        Deb($"Slower bonus: {slowerBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
-        DebList(s1.GetPositions(true));
+        Deb($"Slower bonus: {slowerBonus} | {s1.Orientation}");
+        DebList(s1.GetPositions());
         if (bonus > slowerBonus)
         {
             bonus = slowerBonus;
@@ -422,7 +434,7 @@ class MainPlayer
         // Left
         s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
         int leftBonus = GetShipsNextTurn(s1, x, y, GetNextOrientation(s1.Orientation, +1), direction).Item2;
-        Deb($"Left bonus: {leftBonus} including damage ({GetDamageInPos(s1)}) | {GetNextOrientation(s1.Orientation, +1)}");
+        Deb($"Left bonus: {leftBonus} | {GetNextOrientation(s1.Orientation, +1)}");
         DebList(s1.GetPositions(true));
         if (bonus > leftBonus)
         {
@@ -433,7 +445,7 @@ class MainPlayer
         // Right
         s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
         int rightBonus = GetShipsNextTurn(s1, x, y, GetNextOrientation(s1.Orientation, -1), direction).Item2;
-        Deb($"Right bonus: {rightBonus} including damage ({GetDamageInPos(s1)}) | {GetNextOrientation(s1.Orientation, -1)}");
+        Deb($"Right bonus: {rightBonus} | {GetNextOrientation(s1.Orientation, -1)}");
         DebList(s1.GetPositions(true));
         if (bonus > rightBonus)
         {
@@ -444,7 +456,7 @@ class MainPlayer
         // Wait
         s1 = new Ship(0, ship.Orientation, ship.Speed, 0, 0, ship.X, ship.Y);
         int waitBonus = GetShipsNextTurn(s1, x, y, s1.Orientation, direction).Item2;
-        Deb($"Wait bonus: {waitBonus} including damage ({GetDamageInPos(s1)}) | {s1.Orientation}");
+        Deb($"Wait bonus: {waitBonus} | {s1.Orientation}");
         DebList(s1.GetPositions(true));
         if (bonus > waitBonus)
         {
@@ -455,10 +467,10 @@ class MainPlayer
         return new Tuple<string, int>(action, direction == -1 ? waitBonus : bonus);
     }
 
-    static int GetDamageInPos(Ship s)
+    static int GetDamageInPos(Ship s, bool getInFront = true)
     {
         int damage = 0;
-        foreach (var pos in s.GetPositions(true))
+        foreach (var pos in s.GetPositions(getInFront))
         {
             if (mines.Where(x => x.X == pos.Item1 && x.Y == pos.Item2).Any())
                 damage += 60;
@@ -556,7 +568,7 @@ class MainPlayer
                 else
                     mineCooldown[myShip.ID]--;
 
-                // Deblock
+                // Unblock
                 if (string.IsNullOrEmpty(action))
                 {
                     if (oldPositions.ContainsKey(myShip.ID))
@@ -569,7 +581,7 @@ class MainPlayer
                             nextShip.X = nextCase.Item1;
                             nextShip.Y = nextCase.Item2;
                             var frontCase = nextShip.GetForward();
-                            if (CaseIsEmpty(nextCase.Item1, nextCase.Item2, myShip.ID)&&
+                            if (CaseIsEmpty(nextCase.Item1, nextCase.Item2, myShip.ID) &&
                                 CaseIsEmpty(frontCase.Item1, frontCase.Item2, myShip.ID))
                             {
                                 Deb($"Case in front is Empty ({nextCase.Item1},{nextCase.Item2} && ({frontCase.Item1},{frontCase.Item2}))");
@@ -588,6 +600,32 @@ class MainPlayer
                                     action = "PORT";
                             }
 
+                        }
+                    }
+                }
+
+                // Attack rival's barrels
+                if (string.IsNullOrEmpty(action))
+                {
+                    foreach (var bar in barrels)
+                    {
+                        int dist = HexagonDist(bar.X, bar.Y, myShip.X, myShip.Y);
+                        if (dist >= MaxFireDistance)
+                            continue;
+                        var closestRival = ships.Where(s => s.Player == 0 && HexagonDist(bar.X, bar.Y, s.X, s.Y, s.Orientation) <= dist);
+                        if (closestRival.Any())
+                        {
+                            bar.Used = true;
+                            Deb($"Need to drop enemy's barrel at ({bar.X},{bar.Y})");
+                            var closestRivalShip = closestRival.First();
+                            var actionCandidat = BestActionToApproach(myShip, closestRivalShip.X, closestRivalShip.Y, (barrels.Count == 0 ? 1 : -1));
+                            Ship nextShip = GetShipsNextTurn(myShip, closestRivalShip.X, closestRivalShip.Y, myShip.Orientation, -1).Item1;
+                            Deb($"Considering to {actionCandidat.Item1} ({actionCandidat.Item2})");
+                            if (actionCandidat.Item2 < 20) // No bomb or mine on the way
+                            {
+                                Deb($"Enemy is close to a barrel at ({bar.X},{bar.Y})");
+                                action = $"FIRE {bar.X} {bar.Y}";
+                            }
                         }
                     }
                 }
